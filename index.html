@@ -163,6 +163,49 @@ const DEFAULT_STATE = {
   trips: [],
 };
 
+/* ---------- 見本データ ----------
+   UI を確かめるための2泊3日の例。金額は実際の出張の実績をそのまま使っているので、
+   伝票プレビューは ①60,775 ②27,300 合計88,075 になる。
+   このファイルは公開リポジトリに置くため、社名・人名はすべて伏せてある。 */
+const SAMPLE = {
+  id: 'sample', t: '○○発電所 定修工事立会他',
+  f: '2026-07-22', o: '2026-07-24', dp: 'e',
+  lt: 'C', ng: 2, pd: 100, la: null, ar: '',
+  co: ['○○発電所', '自社 大阪支店'],
+  at: ['協力会社 課長他', '自社 機械8部 担当'],
+  mt: ['発注元 担当SM他', '○○発電所 担当SM他'],
+  amt: '', profit: '', due: '', memo: '会食あり',
+  R: [
+    { d: '2026-07-22', c: '31', cn: '新幹線（普通）', a: '小倉', b: '姫路', r: false, y: 12650, v: '姫路へ移動' },
+    { d: '2026-07-23', c: '62', cn: 'レンタカー', a: '姫路', b: '現地', r: true, y: 22926, v: '○○発電所' },
+    { d: '2026-07-23', c: '11', cn: '電車・バス', a: '姫路', b: '三ノ宮', r: true, y: 1920, v: '自社 大阪支店' },
+    { d: '2026-07-24', c: '62', cn: 'レンタカー', a: '姫路', b: '新大阪', r: false, y: 4449, v: '○○発電所、自社 大阪支店' },
+    { d: '2026-07-24', c: '31', cn: '新幹線（普通）', a: '新大阪', b: '小倉', r: false, y: 14400, v: '北九州へ移動' },
+  ],
+  O: [
+    { d: '2026-07-23', k: 'toll', y: 2430, m: '高速道路' },
+    { d: '2026-07-24', k: 'park', y: 2000, m: '駅ビル地下' },
+  ],
+  E: [
+    { d: '2026-07-23', s: '会食', y: 9980, co: '○○商事', p: '先方4名＋自社2名（計6名）', m: '' },
+    { d: '2026-07-23', s: 'おみやげ', y: 1650, co: '協力会社', p: '', m: '' },
+  ],
+  rn: '○○発電所／定修工事①タービン油冷却ユニット用3方弁補修②空気圧縮機（5台）、'
+    + 'エアドライヤー（2台）年次点検整備。詳細は別紙報告書をご参照。',
+  createdAt: 0,
+};
+function hasSample() { return S.trips.some(t => t.id === 'sample'); }
+function toggleSample() {
+  if (hasSample()) {
+    S.trips = S.trips.filter(t => t.id !== 'sample');
+    view = { name: 'list', tripId: null, open: null };
+  } else {
+    S.trips.push(structuredClone(SAMPLE));
+    view = { name: 'trip', tripId: 'sample', open: null };
+  }
+  save(); render();
+}
+
 let S = load();
 let view = { name: 'list', tripId: null, open: null };
 
@@ -241,7 +284,8 @@ function render() {
 function viewList() {
   if (!S.trips.length) {
     return `<div class="card"><p class="empty">出張がまだありません。<br>出張の予定が決まったら、まず器を作ります。</p></div>
-      <button class="btn" data-act="newTrip">＋ 新しい出張</button>`;
+      <button class="btn" data-act="newTrip">＋ 新しい出張</button>
+      <button class="btn ghost" data-act="sample">見本データを入れて画面を見る</button>`;
   }
   const cards = S.trips.slice().sort((a, b) => (b.f || '').localeCompare(a.f || '')).map(t => {
     const tot = totalOf(t);
@@ -495,6 +539,13 @@ function viewSettings() {
     <div class="total"><span>人名</span><span>${S.master.people.length}</span></div>
     <div class="total"><span>地名</span><span>${S.master.places.length}</span></div>
     <button class="btn danger" data-act="clearMaster">候補をすべて消す</button>
+  </div>
+
+  <div class="card">
+    <h2>見本データ</h2>
+    <p class="hint">2泊3日の例が入ります。画面や伝票の見え方を確かめるためのもので、いつでも消せます。</p>
+    <button class="btn ${hasSample() ? 'danger' : 'ghost'}" data-act="sample">
+      ${hasSample() ? '見本データを消す' : '見本データを入れる'}</button>
   </div>`;
 }
 
@@ -614,6 +665,7 @@ document.addEventListener('click', e => {
   }
   if (act === 'addTransport') { S.profile.transport.push({ c: '', n: '' }); save(); return render(); }
   if (act === 'delTransport') { S.profile.transport.splice(+el.dataset.i, 1); save(); return render(); }
+  if (act === 'sample') { return toggleSample(); }
   if (act === 'clearMaster') {
     if (!confirm('記憶した会社・人名・地名をすべて消します。')) return;
     S.master = { companies: [], people: [], places: [] };
