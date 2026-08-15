@@ -52,6 +52,7 @@
   .btn.sub  { background: #5a6472; }
   .btn.ghost { background: #eef1f5; color: #2f6fdb; }
   .btn.danger { background: #fff; color: #c62828; border: 1px solid #f0c4c4; }
+  .btn[disabled] { opacity: .35; }
 
   /* 行 */
   .item {
@@ -312,9 +313,18 @@ function render() {
 }
 
 /* ---------- 一覧 ---------- */
+function installCard() {
+  if (standalone() || !installEvent) return '';
+  return `<div class="card">
+    <h2>ホーム画面に追加できます</h2>
+    <p class="hint" style="margin:0 0 8px">追加するとブラウザの枠が消えて、電波がなくても開けます。</p>
+    <button class="btn" data-act="install">📲 ホーム画面にこのアプリを追加</button>
+  </div>`;
+}
+
 function viewList() {
   if (!S.trips.length) {
-    return `<div class="card"><p class="empty">出張がまだありません。<br>出張の予定が決まったら、まず器を作ります。</p></div>
+    return installCard() + `<div class="card"><p class="empty">出張がまだありません。<br>出張の予定が決まったら、まず器を作ります。</p></div>
       <button class="btn" data-act="newTrip">＋ 新しい出張</button>
       <button class="btn ghost" data-act="sample">見本データを入れて画面を見る</button>`;
   }
@@ -327,7 +337,7 @@ function viewList() {
       <div class="s">実費 ${yen(tot)} 円${blanks ? `　<span style="color:#c62828">⚠ 未入力 ${blanks} 件</span>` : ''}</div>
     </div>`;
   }).join('');
-  return cards + `<button class="btn" data-act="newTrip">＋ 新しい出張</button>`;
+  return installCard() + cards + `<button class="btn" data-act="newTrip">＋ 新しい出張</button>`;
 }
 
 function totalOf(t) {
@@ -337,6 +347,18 @@ function totalOf(t) {
 function countBlank(t) {
   const c = a => a.filter(r => r.y === null || r.y === '' || r.y === undefined).length;
   return c(t.R) + c(t.O) + c(t.E);
+}
+
+/* 同じ日の行だけ入れ替える。日付順の並びは崩さず、日の中の順序だけ本人が決める */
+function moveBtns(list, g, i) {
+  const up = i > 0 && list[i - 1].d === list[i].d;
+  const dn = i < list.length - 1 && list[i + 1].d === list[i].d;
+  if (!up && !dn) return '';
+  return `<div class="row2">
+    <button class="btn ghost" data-act="move" data-p="${g}" data-i="${i}" data-to="${i - 1}" ${up ? '' : 'disabled'}>↑ 上へ</button>
+    <button class="btn ghost" data-act="move" data-p="${g}" data-i="${i}" data-to="${i + 1}" ${dn ? '' : 'disabled'}>↓ 下へ</button>
+  </div>
+  <p class="hint" style="margin-bottom:9px">同じ日の中での順番です。伝票にこの順で並びます。</p>`;
 }
 
 /* ---------- チップ ---------- */
@@ -420,6 +442,7 @@ function viewTrip() {
         <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:9px">
           <input type="checkbox" style="width:auto" data-p="${key}.r" ${r.r ? 'checked' : ''} data-re="1">往復
         </label>
+        ${moveBtns(t.R, 'R', i)}
         <button class="btn danger" data-act="del" data-p="R" data-i="${i}">この行を削除</button>
       </div>
     </div>`;
@@ -538,7 +561,19 @@ function viewTrip() {
 /* ---------- 設定 ---------- */
 function viewSettings() {
   const p = S.profile;
+  const mode = standalone() ? 'アプリとして起動中' : 'ブラウザで表示中';
+  const inst = standalone() ? '追加済み'
+    : installEvent ? '追加できます（下のボタン）'
+    : 'この画面からは追加できません';
   return `<div class="card">
+    <h2>ホーム画面への追加</h2>
+    <div class="total"><span>いまの状態</span><span style="font-weight:500">${mode}</span></div>
+    <div class="total"><span>追加</span><span style="font-weight:500">${inst}</span></div>
+    ${installEvent && !standalone() ? '<button class="btn" data-act="install">📲 ホーム画面にこのアプリを追加</button>' : ''}
+    ${!installEvent && !standalone() ? `<p class="hint">「追加できません」と出るときは、すでに追加済みの可能性があります。ホーム画面ではなく<b>アプリ一覧（下から上へスワイプ）</b>に「出張旅費」がないか探してください。見つかったら長押しでホーム画面へ置けます。</p>` : ''}
+  </div>
+
+  <div class="card">
     <h2>基本情報（一度だけ）</h2>
     <!-- 社員番号・部課コードは会社PC側で自動反映されるため持たない。
          氏名・部課名は申請メールの署名にだけ使う -->
@@ -696,6 +731,13 @@ document.addEventListener('click', e => {
     view.open = g + '.' + t[g].indexOf(added);
     save(); return render();
   }
+  if (act === 'move') {
+    const g = el.dataset.p, i = +el.dataset.i, j = +el.dataset.to;
+    const list = t[g];
+    [list[i], list[j]] = [list[j], list[i]];
+    view.open = g + '.' + j;
+    save(); return render();
+  }
   if (act === 'del') {
     t[el.dataset.p].splice(+el.dataset.i, 1);
     view.open = null; save(); return render();
@@ -718,6 +760,12 @@ document.addEventListener('click', e => {
     if (!confirm('記憶した会社・人名・地名をすべて消します。')) return;
     S.master = { companies: [], people: [], places: [] };
     save(); return render();
+  }
+  if (act === 'install') {
+    if (!installEvent) return;
+    installEvent.prompt();
+    installEvent.userChoice.finally(() => { installEvent = null; render(); });
+    return;
   }
   if (act === 'preview') { openPreview(); return; }
   if (act === 'mailApply') { openApplyMail(); return; }
@@ -854,6 +902,19 @@ function importFromHash() {
   } catch { return false; }
 }
 importFromHash();
+
+/* ---------- ホーム画面への追加 ----------
+   Chrome は条件を満たすと beforeinstallprompt を投げてくる。既定のメニューは
+   見つけにくいので、その場でボタンを出して本人に押させる。 */
+let installEvent = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  installEvent = e;
+  render();
+});
+window.addEventListener('appinstalled', () => { installEvent = null; render(); });
+const standalone = () =>
+  matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
