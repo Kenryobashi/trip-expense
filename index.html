@@ -407,7 +407,7 @@ function viewTrip() {
         </div>
         <label class="f"><span>金額（円）</span>
           <input type="number" inputmode="numeric" data-p="${key}.y" value="${o.y ?? ''}"></label>
-        <label class="f"><span>メモ</span><input data-p="${key}.m" value="${h(o.m)}" placeholder="姫路西+阪神高速 など"></label>
+        <label class="f"><span>メモ</span><input data-p="${key}.m" value="${h(o.m)}" placeholder="○○IC+高速道路 など"></label>
         <button class="btn danger" data-act="del" data-p="O" data-i="${i}">この行を削除</button>
       </div>
     </div>`;
@@ -429,11 +429,11 @@ function viewTrip() {
             <input type="number" inputmode="numeric" data-p="${key}.y" value="${e.y ?? ''}"></label>
         </div>
         <label class="f"><span>店・品目</span>
-          <input data-p="${key}.s" value="${h(e.s)}" placeholder="手打蕎麦 武蔵 / おみやげ など"></label>
+          <input data-p="${key}.s" value="${h(e.s)}" placeholder="会食 / おみやげ など"></label>
         <label class="f"><span>相手先（1社）</span>
           <input list="dlCompany" data-p="${key}.co" value="${h(e.co)}"></label>
         <label class="f"><span>誰と（参加者）</span>
-          <input list="dlPerson" data-p="${key}.p" value="${h(e.p)}" placeholder="エムテス4名＋牛山様＋自分（計6名）"></label>
+          <input list="dlPerson" data-p="${key}.p" value="${h(e.p)}" placeholder="先方4名＋自分2名（計6名）"></label>
         <label class="f"><span>メモ</span><input data-p="${key}.m" value="${h(e.m)}"></label>
         <button class="btn danger" data-act="del" data-p="E" data-i="${i}">この行を削除</button>
       </div>
@@ -469,9 +469,9 @@ function viewTrip() {
   <div class="card">
     <h2>報告（申請メールと報告要旨で共用）</h2>
     <label class="f"><span>同行者</span></label>
-    ${chips('t.at', t.at, 'dlPerson', '例）エムテス 渡部課長 → Enter')}
+    ${chips('t.at', t.at, 'dlPerson', '例）自社 ○○課長 → Enter')}
     <label class="f" style="margin-top:9px"><span>面談者</span></label>
-    ${chips('t.mt', t.mt, 'dlPerson', '例）日鉄エンジニアリング 岩田SM → Enter')}
+    ${chips('t.mt', t.mt, 'dlPerson', '例）○○社 ○○SM → Enter')}
     <div class="row2" style="margin-top:9px">
       <label class="f"><span>受注金額</span><input data-p="t.amt" value="${h(t.amt)}"></label>
       <label class="f"><span>利益</span><input data-p="t.profit" value="${h(t.profit)}"></label>
