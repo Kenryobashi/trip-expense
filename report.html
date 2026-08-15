@@ -80,6 +80,9 @@ const LODGE_LABEL = {
 const MAX_ROWS = 10;
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* 会社様式の報告要旨に実施事項の枠はないので、内容の中へ畳んで転記できる形にする */
+const naiyo = p => [p.ji ? '実施事項：\n' + p.ji : '', p.rn || ''].filter(Boolean).join('\n');
 const yen = n => (n === null || n === undefined || n === '') ? '' : Number(n).toLocaleString('ja-JP');
 const md  = ds => { if (!ds) return ''; const [y,m,d] = ds.split('-').map(Number); return `${y}/${String(m).padStart(2,'0')}/${String(d).padStart(2,'0')}`; };
 
@@ -310,10 +313,9 @@ function render(p) {
       <h1>報告要旨（F8）転記用</h1>
       <dl>
         <dt>件名</dt><dd>${esc(p.t)}</dd>
-        <dt>実施事項</dt><dd>${esc(p.ji || '')}</dd>
         <dt>同行者</dt><dd>${esc((p.at || []).join('、'))}</dd>
         <dt>面談者</dt><dd>${esc((p.mt || []).join('、'))}</dd>
-        <dt>内容</dt><dd>${esc(p.rn)}</dd>
+        <dt>内容</dt><dd>${esc(naiyo(p))}</dd>
       </dl>
     </div>
 

@@ -226,6 +226,11 @@ function load() {
     s.profile = Object.assign(structuredClone(DEFAULT_STATE.profile), raw.profile || {});
     s.master  = Object.assign(structuredClone(DEFAULT_STATE.master),  raw.master  || {});
     if (!s.profile.transport || !s.profile.transport.length) s.profile.transport = DEFAULT_TRANSPORT.slice();
+    /* 納期は手入力だった頃の「2026年11月30日」を日付欄が読める形に直す */
+    s.trips.forEach(t => {
+      const m = /^(\d{4})年(\d{1,2})月(\d{1,2})日$/.exec(t.due || '');
+      if (m) t.due = `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+    });
     return s;
   } catch { return structuredClone(DEFAULT_STATE); }
 }
@@ -237,6 +242,8 @@ const yen  = n => (n === null || n === undefined || n === '') ? '' : Number(n).t
 const uid  = () => Math.random().toString(36).slice(2, 9);
 const today= () => new Date().toISOString().slice(0, 10);
 const mdOf = d => d ? d.slice(5).replace('-', '/') : '';
+const jpDate = d => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d || '');
+  return m ? `${m[1]}年${+m[2]}月${+m[3]}日` : (d || ''); };
 const num  = v => (v === '' || v === null || v === undefined) ? null : Number(v);
 
 function dayCount(f, t) {
@@ -507,7 +514,7 @@ function viewTrip() {
       <label class="f"><span>利益（千円）</span>
         <input type="number" inputmode="numeric" data-p="t.profit" value="${h(t.profit)}"></label>
     </div>
-    <label class="f"><span>納期</span><input data-p="t.due" value="${h(t.due)}"></label>
+    <label class="f"><span>納期</span><input type="date" data-p="t.due" value="${h(t.due)}"></label>
     <label class="f"><span>その他・補足（会食の有無など）</span>
       <input data-p="t.memo" value="${h(t.memo)}"></label>
     <label class="f"><span>結果・所感（報告要旨の「内容」に入ります）</span>
@@ -679,11 +686,14 @@ document.addEventListener('click', e => {
   }
   if (act === 'add') {
     const g = el.dataset.p;
-    const d = t.f || today();
+    /* 同じ日の行を続けて足すことが多いので、直前の行の日付から始める */
+    const d = t[g].length ? t[g][t[g].length - 1].d : (t.f || today());
     if (g === 'R') t.R.push({ d, c: '', cn: S.profile.transport[0]?.n || '', a: '', b: '', r: false, y: null, v: '' });
     if (g === 'O') t.O.push({ d, k: 'toll', y: null, m: '' });
     if (g === 'E') t.E.push({ d, s: '', y: null, co: '', p: '', m: '' });
-    view.open = g + '.' + (t[g].length - 1);
+    const added = t[g][t[g].length - 1];
+    sortByDate(t, g);
+    view.open = g + '.' + t[g].indexOf(added);
     save(); return render();
   }
   if (act === 'del') {
@@ -769,13 +779,13 @@ function openApplyMail() {
     : '　（別紙 行程表のとおり）';
   const body = [
     `件名：${t.t}`,
-    `実施事項：\n${(t.ji || '－').replace(/^/gm, '　')}`,
     `日時：${t.f} ${timeFrom} 〜 ${t.o} 18:00（${nights}泊${days}日）`,
     `場所：${t.co.join('、')}`,
     `面談者：${t.mt.join('、')}`,
     `同行者：${t.at.join('、')}`,
+    `実施事項：\n${(t.ji || '－').replace(/^/gm, '　')}`,
     `受注金額／利益：${t.amt ? yen(t.amt) + '千円' : '－'} ／ ${t.profit ? yen(t.profit) + '千円' : '－'}`,
-    `納期：${t.due || '－'}`,
+    `納期：${jpDate(t.due) || '－'}`,
     `旅程：`,
     itinerary,
     `その他・補足：${t.memo || '－'}`,
