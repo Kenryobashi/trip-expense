@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#2f6fdb">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="./manifest.json">
+<title>出張旅費</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; padding: 0 0 80px;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+    background: #f4f5f7; color: #1a1a1a; font-size: 15px;
+  }
+  .wrap { max-width: 480px; margin: 0 auto; padding: 0 12px; }
+  header {
+    background: #2f6fdb; color: #fff; padding: 12px; position: sticky; top: 0; z-index: 20;
+    display: flex; align-items: center; gap: 10px;
+  }
+  header h1 { font-size: 16px; margin: 0; flex: 1; font-weight: 600; }
+  header button {
+    background: rgba(255,255,255,.2); border: none; color: #fff;
+    padding: 6px 10px; border-radius: 6px; font-size: 13px; cursor: pointer;
+  }
+  .card {
+    background: #fff; border-radius: 10px; margin-top: 10px; padding: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  }
+  .card > h2 {
+    font-size: 13px; margin: 0 0 8px; color: #2f6fdb;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  label.f { display: block; margin-bottom: 9px; }
+  label.f > span { display: block; font-size: 11px; color: #777; margin-bottom: 3px; }
+  input, select, textarea {
+    width: 100%; padding: 9px 10px; border: 1px solid #ccd2da; border-radius: 7px;
+    font-size: 15px; font-family: inherit; background: #fff;
+  }
+  input[type=number] { text-align: right; font-variant-numeric: tabular-nums; }
+  textarea { min-height: 76px; resize: vertical; }
+  .row2 { display: flex; gap: 8px; }
+  .row2 > * { flex: 1; min-width: 0; }
+  .btn {
+    display: block; width: 100%; padding: 13px; border: none; border-radius: 9px;
+    background: #2f6fdb; color: #fff; font-size: 15px; font-weight: 600;
+    text-align: center; text-decoration: none; cursor: pointer; margin-top: 8px;
+  }
+  .btn.sub  { background: #5a6472; }
+  .btn.ghost { background: #eef1f5; color: #2f6fdb; }
+  .btn.danger { background: #fff; color: #c62828; border: 1px solid #f0c4c4; }
+
+  /* 行 */
+  .item {
+    border: 1px solid #e2e6ec; border-radius: 9px; margin-bottom: 7px; overflow: hidden;
+    background: #fff;
+  }
+  .item.pending { background: #fff8e6; border-color: #ecd08f; }
+  .item > .sum {
+    padding: 10px 11px; cursor: pointer; display: flex; align-items: center; gap: 8px;
+    font-size: 14px;
+  }
+  .item > .sum .txt { flex: 1; min-width: 0; }
+  .item > .sum .d { font-size: 11px; color: #888; display: block; }
+  .item > .sum .y { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .item > .sum .y.no { color: #c62828; font-size: 12px; font-weight: 600; }
+  .item > .body { padding: 0 11px 11px; border-top: 1px solid #eef1f5; }
+  .item > .body.hide { display: none; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+  .chip {
+    background: #eef1f5; border-radius: 14px; padding: 4px 9px; font-size: 13px;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .chip b { font-weight: 500; }
+  .chip i { cursor: pointer; color: #888; font-style: normal; }
+
+  .empty { text-align: center; color: #999; font-size: 13px; padding: 22px 0; }
+  .total {
+    display: flex; justify-content: space-between; padding: 9px 2px;
+    font-weight: 700; font-variant-numeric: tabular-nums;
+  }
+  .total.grand { font-size: 17px; color: #2f6fdb; border-top: 2px solid #2f6fdb; margin-top: 4px; }
+  .hint { font-size: 11px; color: #888; margin: 4px 0 0; }
+  .warn { color: #c62828; font-size: 12px; margin: 6px 0 0; }
+  /* 申請メールのシート（mailto が開けない環境でも本文をコピーで渡せる） */
+  .sheet { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 50;
+    display: flex; align-items: flex-end; }
+  .sheet.hide { display: none; }
+  .sheet .panel { background: #fff; width: 100%; max-height: 88vh; overflow: auto;
+    border-radius: 14px 14px 0 0; padding: 14px 14px 22px; }
+  .sheet .panel h2 { font-size: 14px; margin: 0 0 8px; color: #2f6fdb; }
+  .sheet .panel textarea { min-height: 210px; font-size: 12px; line-height: 1.55; }
+  .tripcard { cursor: pointer; }
+  .tripcard .t { font-weight: 600; }
+  .tripcard .s { font-size: 12px; color: #777; margin-top: 3px; }
+</style>
+</head>
+<body>
+<header>
+  <button id="back" style="display:none">←</button>
+  <h1 id="title">出張旅費</h1>
+  <button id="gear">⚙</button>
+</header>
+<div class="wrap" id="app"></div>
+
+<!-- 申請メール：mailto が開けない環境（PWA・プレビュー・メール未設定）でも本文を渡せる逃げ道 -->
+<div class="sheet hide" id="mailSheet">
+  <div class="panel">
+    <h2>出張申請メールの下書き（自分宛）</h2>
+    <p class="hint" id="mailTo" style="margin:0 0 6px"></p>
+    <a class="btn" id="mailOpen" href="#">✉️ 自分宛に下書きを送る</a>
+    <button class="btn ghost" id="mailCopy">📋 本文をコピー</button>
+    <p class="hint">上司への申請は会社PCから。ここでは下書きを自分に送るか、コピーして持っていくだけです。</p>
+    <textarea id="mailBody" readonly style="margin-top:8px"></textarea>
+    <button class="btn sub" id="mailClose">閉じる</button>
+  </div>
+</div>
+
+<datalist id="dlCompany"></datalist>
+<datalist id="dlPerson"></datalist>
+<datalist id="dlPlace"></datalist>
+
+<script>
+/* =========================================================
+   出張旅費精算ツール
+   - 出張1件が軸。1行 ＝ 伝票の交通費明細1行
+   - 出張前は器だけ作り、移動中に金額を埋める
+   - 高速・駐車・燃料は独立して記録し、伝票側でレンタカー行へ合算
+   ========================================================= */
+
+const LS = 'trip-expense-v1';
+
+const DEFAULT_TRANSPORT = [
+  { c: '11', n: '電車・バス' },
+  { c: '31', n: '新幹線（普通）' },
+  { c: '62', n: 'レンタカー' },
+  { c: '',   n: 'タクシー' },
+  { c: '',   n: '飛行機' },
+];
+const OTHER_KINDS = [
+  { k: 'toll', n: '高速代' },
+  { k: 'park', n: '駐車場代' },
+  { k: 'fuel', n: 'ガソリン代' },
+];
+const LODGE = [
+  { t: 'C', n: '丙地：旅館・ホテル等' },
+  { t: 'B', n: '乙地：寮・知人宅等' },
+  { t: 'A', n: '甲地：車（船・空）内' },
+];
+
+const DEFAULT_STATE = {
+  profile: {
+    name: '', empNo: '', deptCode: '', deptName: '',
+    /* 下書きの宛先は常に自分。公開リポジトリにメールアドレスを置かないため、
+       初回だけ ⚙設定 で入力する（端末の localStorage に残る） */
+    email: '',
+    perDiem: 1900, lodgeA: 1900, lodgeB: 4400, lodgeC: 10800,
+    transport: DEFAULT_TRANSPORT.slice(),
+  },
+  master: { companies: [], people: [], places: [] },
+  trips: [],
+};
+
+let S = load();
+let view = { name: 'list', tripId: null, open: null };
+
+/* ---------- 保存 ---------- */
+function load() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LS));
+    if (!raw) return structuredClone(DEFAULT_STATE);
+    const s = Object.assign(structuredClone(DEFAULT_STATE), raw);
+    s.profile = Object.assign(structuredClone(DEFAULT_STATE.profile), raw.profile || {});
+    s.master  = Object.assign(structuredClone(DEFAULT_STATE.master),  raw.master  || {});
+    if (!s.profile.transport || !s.profile.transport.length) s.profile.transport = DEFAULT_TRANSPORT.slice();
+    return s;
+  } catch { return structuredClone(DEFAULT_STATE); }
+}
+function save() { try { localStorage.setItem(LS, JSON.stringify(S)); } catch {} }
+
+/* ---------- 小物 ---------- */
+const h    = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const yen  = n => (n === null || n === undefined || n === '') ? '' : Number(n).toLocaleString('ja-JP');
+const uid  = () => Math.random().toString(36).slice(2, 9);
+const today= () => new Date().toISOString().slice(0, 10);
+const mdOf = d => d ? d.slice(5).replace('-', '/') : '';
+const num  = v => (v === '' || v === null || v === undefined) ? null : Number(v);
+
+function dayCount(f, t) {
+  if (!f || !t) return 0;
+  return Math.round((new Date(t + 'T00:00:00') - new Date(f + 'T00:00:00')) / 86400000) + 1;
+}
+function trip() { return S.trips.find(t => t.id === view.tripId); }
+
+/* マスタへ自動記憶 */
+function learn(key, v) {
+  v = (v || '').trim();
+  if (!v) return;
+  const a = S.master[key];
+  if (!a.includes(v)) { a.push(v); a.sort((x, y) => x.localeCompare(y, 'ja')); }
+}
+
+function encodePayload(o) {
+  return btoa(unescape(encodeURIComponent(JSON.stringify(o))))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/* ---------- 出張の新規作成 ---------- */
+function newTrip() {
+  const d = today();
+  return {
+    id: uid(), t: '', f: d, o: d, dp: 'm',
+    pc: '1101', pj: '',
+    lt: 'C', ng: 0, pd: 100, la: null, ar: '',
+    co: [], at: [], mt: [],
+    amt: '', profit: '', due: '', memo: '',
+    R: [], O: [], E: [], rn: '',
+    createdAt: Date.now(),
+  };
+}
+
+/* =========================================================
+   描画
+   ========================================================= */
+function render() {
+  const app = document.getElementById('app');
+  const back = document.getElementById('back');
+  const title = document.getElementById('title');
+
+  document.getElementById('dlCompany').innerHTML = S.master.companies.map(c => `<option value="${h(c)}">`).join('');
+  document.getElementById('dlPerson').innerHTML  = S.master.people.map(c => `<option value="${h(c)}">`).join('');
+  document.getElementById('dlPlace').innerHTML   = S.master.places.map(c => `<option value="${h(c)}">`).join('');
+
+  if (view.name === 'list')      { back.style.display = 'none';  title.textContent = '出張旅費'; app.innerHTML = viewList(); }
+  else if (view.name === 'settings') { back.style.display = '';  title.textContent = '設定';     app.innerHTML = viewSettings(); }
+  else                           { back.style.display = '';      title.textContent = trip()?.t || '出張'; app.innerHTML = viewTrip(); }
+}
+
+/* ---------- 一覧 ---------- */
+function viewList() {
+  if (!S.trips.length) {
+    return `<div class="card"><p class="empty">出張がまだありません。<br>出張の予定が決まったら、まず器を作ります。</p></div>
+      <button class="btn" data-act="newTrip">＋ 新しい出張</button>`;
+  }
+  const cards = S.trips.slice().sort((a, b) => (b.f || '').localeCompare(a.f || '')).map(t => {
+    const tot = totalOf(t);
+    const blanks = countBlank(t);
+    return `<div class="card tripcard" data-act="openTrip" data-id="${t.id}">
+      <div class="t">${h(t.t || '（用件未入力）')}</div>
+      <div class="s">${h(t.f)} 〜 ${h(t.o)}　${h(t.co.join('・'))}</div>
+      <div class="s">実費 ${yen(tot)} 円${blanks ? `　<span style="color:#c62828">⚠ 未入力 ${blanks} 件</span>` : ''}</div>
+    </div>`;
+  }).join('');
+  return cards + `<button class="btn" data-act="newTrip">＋ 新しい出張</button>`;
+}
+
+function totalOf(t) {
+  const s = a => a.reduce((x, r) => x + (Number(r.y) || 0), 0);
+  return s(t.R) + s(t.O) + s(t.E);
+}
+function countBlank(t) {
+  const c = a => a.filter(r => r.y === null || r.y === '' || r.y === undefined).length;
+  return c(t.R) + c(t.O) + c(t.E);
+}
+
+/* ---------- チップ ---------- */
+function chips(path, list, dl, ph) {
+  return `<div class="chips">
+    ${list.map((v, i) => `<span class="chip"><b>${h(v)}</b><i data-act="chipDel" data-p="${path}" data-i="${i}">✕</i></span>`).join('')}
+  </div>
+  <input list="${dl}" placeholder="${ph}" data-act="chipAdd" data-p="${path}">`;
+}
+
+/* ---------- 出張詳細 ---------- */
+function viewTrip() {
+  const t = trip();
+  if (!t) { view.name = 'list'; return viewList(); }
+
+  const days = dayCount(t.f, t.o);
+  const nights = t.ng || Math.max(days - 1, 0);
+  const timeFrom = t.dp === 'e' ? '18:00' : '08:00';
+
+  const opt = (arr, v, val, lab) => arr.map(o =>
+    `<option value="${h(o[val])}" ${String(o[val]) === String(v) ? 'selected' : ''}>${h(o[lab])}</option>`).join('');
+
+  /* --- 基本情報 --- */
+  const basic = `<div class="card">
+    <h2>基本情報</h2>
+    <label class="f"><span>件名・実施事項</span>
+      <input data-p="t.t" value="${h(t.t)}" placeholder="×××社／○○○向け 空気圧縮機 立会検査（メーカー名）"></label>
+    <div class="row2">
+      <label class="f"><span>出発日</span><input type="date" data-p="t.f" value="${h(t.f)}"></label>
+      <label class="f"><span>帰着日</span><input type="date" data-p="t.o" value="${h(t.o)}"></label>
+    </div>
+    <div class="row2">
+      <label class="f"><span>出発パターン</span>
+        <select data-p="t.dp" data-re="1">
+          <option value="m" ${t.dp === 'm' ? 'selected' : ''}>朝出発（08:00〜18:00）</option>
+          <option value="e" ${t.dp === 'e' ? 'selected' : ''}>前日夜移動（18:00〜18:00）</option>
+        </select></label>
+      <label class="f"><span>泊数</span>
+        <input type="number" data-p="t.ng" data-re="1" value="${nights}"></label>
+    </div>
+    <p class="hint">出張期間：${h(t.f)} ${timeFrom} 〜 ${h(t.o)} 18:00　${nights}泊${days}日（日当 ${days}日分）</p>
+    <label class="f"><span>宿泊費の区分</span>
+      <select data-p="t.lt" data-re="1">${opt(LODGE, t.lt, 't', 'n')}</select></label>
+    <label class="f"><span>訪問先（会社）</span></label>
+    ${chips('t.co', t.co, 'dlCompany', '会社名を入力して Enter')}
+    <div class="row2" style="margin-top:9px">
+      <label class="f"><span>目的別コード</span><input data-p="t.pc" value="${h(t.pc)}"></label>
+      <label class="f"><span>プロジェクトコード</span><input data-p="t.pj" value="${h(t.pj)}"></label>
+    </div>
+  </div>`;
+
+  /* --- 交通費の行 --- */
+  const transport = S.profile.transport;
+  const rows = t.R.map((r, i) => {
+    const key = 'R.' + i;
+    const open = view.open === key;
+    const label = (r.cn || '交通手段');
+    return `<div class="item ${r.y === null ? 'pending' : ''}">
+      <div class="sum" data-act="toggle" data-k="${key}">
+        <div class="txt"><span class="d">${h(mdOf(r.d))}　${h(label)}</span>
+          ${h(r.a || '?')} ${r.r ? '⇔' : '→'} ${h(r.b || '?')}</div>
+        <div class="y ${r.y === null ? 'no' : ''}">${r.y === null ? '金額未入力' : yen(r.y) + ' 円'}</div>
+      </div>
+      <div class="body ${open ? '' : 'hide'}">
+        <div class="row2">
+          <label class="f"><span>日付</span><input type="date" data-p="${key}.d" value="${h(r.d)}"></label>
+          <label class="f"><span>交通機関</span>
+            <select data-p="${key}.cn" data-re="1">
+              ${transport.map(o => `<option ${o.n === r.cn ? 'selected' : ''}>${h(o.n)}</option>`).join('')}
+            </select></label>
+        </div>
+        <div class="row2">
+          <label class="f"><span>乗車区間（発）</span><input list="dlPlace" data-p="${key}.a" value="${h(r.a)}"></label>
+          <label class="f"><span>（着）</span><input list="dlPlace" data-p="${key}.b" value="${h(r.b)}"></label>
+        </div>
+        <label class="f"><span>金額（円）</span>
+          <input type="number" inputmode="numeric" data-p="${key}.y" value="${r.y ?? ''}" placeholder="移動中に入力"></label>
+        <label class="f"><span>訪問先（行先等）</span>
+          <input list="dlCompany" data-p="${key}.v" value="${h(r.v)}"></label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:9px">
+          <input type="checkbox" style="width:auto" data-p="${key}.r" ${r.r ? 'checked' : ''} data-re="1">往復
+        </label>
+        <button class="btn danger" data-act="del" data-p="R" data-i="${i}">この行を削除</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  /* --- 高速・駐車・燃料 --- */
+  const others = t.O.map((o, i) => {
+    const key = 'O.' + i;
+    const open = view.open === key;
+    const kind = (OTHER_KINDS.find(k => k.k === o.k) || {}).n || o.k;
+    return `<div class="item ${o.y === null ? 'pending' : ''}">
+      <div class="sum" data-act="toggle" data-k="${key}">
+        <div class="txt"><span class="d">${h(mdOf(o.d))}</span>${h(kind)}${o.m ? '　' + h(o.m) : ''}</div>
+        <div class="y ${o.y === null ? 'no' : ''}">${o.y === null ? '金額未入力' : yen(o.y) + ' 円'}</div>
+      </div>
+      <div class="body ${open ? '' : 'hide'}">
+        <div class="row2">
+          <label class="f"><span>日付</span><input type="date" data-p="${key}.d" value="${h(o.d)}"></label>
+          <label class="f"><span>種別</span>
+            <select data-p="${key}.k" data-re="1">${opt(OTHER_KINDS, o.k, 'k', 'n')}</select></label>
+        </div>
+        <label class="f"><span>金額（円）</span>
+          <input type="number" inputmode="numeric" data-p="${key}.y" value="${o.y ?? ''}"></label>
+        <label class="f"><span>メモ</span><input data-p="${key}.m" value="${h(o.m)}" placeholder="姫路西+阪神高速 など"></label>
+        <button class="btn danger" data-act="del" data-p="O" data-i="${i}">この行を削除</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  /* --- 交際費・協議費他 --- */
+  const ents = t.E.map((e, i) => {
+    const key = 'E.' + i;
+    const open = view.open === key;
+    return `<div class="item ${e.y === null ? 'pending' : ''}">
+      <div class="sum" data-act="toggle" data-k="${key}">
+        <div class="txt"><span class="d">${h(mdOf(e.d))}　${h(e.co)}</span>${h(e.s || '（店・品目）')}</div>
+        <div class="y ${e.y === null ? 'no' : ''}">${e.y === null ? '金額未入力' : yen(e.y) + ' 円'}</div>
+      </div>
+      <div class="body ${open ? '' : 'hide'}">
+        <div class="row2">
+          <label class="f"><span>日付</span><input type="date" data-p="${key}.d" value="${h(e.d)}"></label>
+          <label class="f"><span>金額（円）</span>
+            <input type="number" inputmode="numeric" data-p="${key}.y" value="${e.y ?? ''}"></label>
+        </div>
+        <label class="f"><span>店・品目</span>
+          <input data-p="${key}.s" value="${h(e.s)}" placeholder="手打蕎麦 武蔵 / おみやげ など"></label>
+        <label class="f"><span>相手先（1社）</span>
+          <input list="dlCompany" data-p="${key}.co" value="${h(e.co)}"></label>
+        <label class="f"><span>誰と（参加者）</span>
+          <input list="dlPerson" data-p="${key}.p" value="${h(e.p)}" placeholder="エムテス4名＋牛山様＋自分（計6名）"></label>
+        <label class="f"><span>メモ</span><input data-p="${key}.m" value="${h(e.m)}"></label>
+        <button class="btn danger" data-act="del" data-p="E" data-i="${i}">この行を削除</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  const sum = a => a.reduce((x, r) => x + (Number(r.y) || 0), 0);
+  const blanks = countBlank(t);
+
+  return `${basic}
+
+  <div class="card">
+    <h2>交通費（伝票の明細行になります）</h2>
+    ${rows || '<p class="empty">行がありません。出張前に往路・復路の器だけ作っておくと、移動中は金額を打つだけです。</p>'}
+    <button class="btn ghost" data-act="add" data-p="R">＋ 交通費の行</button>
+    <div class="total"><span>小計</span><span>${yen(sum(t.R))} 円</span></div>
+  </div>
+
+  <div class="card">
+    <h2>高速・駐車・ガソリン</h2>
+    ${others || '<p class="empty">その日のレンタカー行へ自動で合算されます。</p>'}
+    <button class="btn ghost" data-act="add" data-p="O">＋ 高速・駐車・燃料</button>
+    <div class="total"><span>小計</span><span>${yen(sum(t.O))} 円</span></div>
+  </div>
+
+  <div class="card">
+    <h2>交際費・協議費他（別伝票）</h2>
+    ${ents || '<p class="empty">おみやげ・会食など。いつ・誰と を、その場で残します。</p>'}
+    <button class="btn ghost" data-act="add" data-p="E">＋ 交際費・協議費他</button>
+    <div class="total"><span>小計</span><span>${yen(sum(t.E))} 円</span></div>
+  </div>
+
+  <div class="card">
+    <h2>報告（申請メールと報告要旨で共用）</h2>
+    <label class="f"><span>同行者</span></label>
+    ${chips('t.at', t.at, 'dlPerson', '例）エムテス 渡部課長 → Enter')}
+    <label class="f" style="margin-top:9px"><span>面談者</span></label>
+    ${chips('t.mt', t.mt, 'dlPerson', '例）日鉄エンジニアリング 岩田SM → Enter')}
+    <div class="row2" style="margin-top:9px">
+      <label class="f"><span>受注金額</span><input data-p="t.amt" value="${h(t.amt)}"></label>
+      <label class="f"><span>利益</span><input data-p="t.profit" value="${h(t.profit)}"></label>
+    </div>
+    <label class="f"><span>納期</span><input data-p="t.due" value="${h(t.due)}"></label>
+    <label class="f"><span>その他・補足（会食の有無など）</span>
+      <input data-p="t.memo" value="${h(t.memo)}"></label>
+    <label class="f"><span>内容（報告要旨に入ります）</span>
+      <textarea data-p="t.rn">${h(t.rn)}</textarea></label>
+  </div>
+
+  <div class="card">
+    <h2>合計</h2>
+    <div class="total"><span>交通費</span><span>${yen(sum(t.R))} 円</span></div>
+    <div class="total"><span>高速・駐車・燃料</span><span>${yen(sum(t.O))} 円</span></div>
+    <div class="total"><span>交際費・協議費他</span><span>${yen(sum(t.E))} 円</span></div>
+    <div class="total grand"><span>実費合計</span><span>${yen(totalOf(t))} 円</span></div>
+    ${blanks ? `<p class="warn">⚠ 金額が未入力の行が ${blanks} 件あります</p>` : ''}
+  </div>
+
+  <a class="btn" data-act="mailApply">✉️ 出張申請メールの下書き（自分宛）</a>
+  <a class="btn" data-act="preview">📄 精算プレビューを開く（出張後）</a>
+  <button class="btn danger" data-act="delTrip">この出張を削除</button>`;
+}
+
+/* ---------- 設定 ---------- */
+function viewSettings() {
+  const p = S.profile;
+  return `<div class="card">
+    <h2>基本情報（一度だけ）</h2>
+    <div class="row2">
+      <label class="f"><span>氏名</span><input data-p="p.name" value="${h(p.name)}"></label>
+      <label class="f"><span>社員番号</span><input data-p="p.empNo" value="${h(p.empNo)}"></label>
+    </div>
+    <div class="row2">
+      <label class="f"><span>部課コード</span><input data-p="p.deptCode" value="${h(p.deptCode)}"></label>
+      <label class="f"><span>部課名</span><input data-p="p.deptName" value="${h(p.deptName)}"></label>
+    </div>
+    <label class="f"><span>自分のメール（下書き・プレビューの送り先）</span>
+      <input type="email" data-p="p.email" value="${h(p.email)}"></label>
+    <p class="hint">申請メールも精算プレビューも、宛先は常に自分です。会社PCで清書して上司へ送ります。</p>
+  </div>
+
+  <div class="card">
+    <h2>単価（社内規程が変わったらここを直す）</h2>
+    <label class="f"><span>日当</span><input type="number" data-p="p.perDiem" value="${p.perDiem}"></label>
+    <label class="f"><span>宿泊費 甲地（車・船・空内）</span><input type="number" data-p="p.lodgeA" value="${p.lodgeA}"></label>
+    <label class="f"><span>宿泊費 乙地（寮・知人宅等）</span><input type="number" data-p="p.lodgeB" value="${p.lodgeB}"></label>
+    <label class="f"><span>宿泊費 丙地（旅館・ホテル等）</span><input type="number" data-p="p.lodgeC" value="${p.lodgeC}"></label>
+  </div>
+
+  <div class="card">
+    <h2>交通機関（コードは分かり次第ここに）</h2>
+    ${p.transport.map((o, i) => `<div class="row2" style="margin-bottom:7px">
+      <input style="flex:0 0 68px" data-p="p.transport.${i}.c" value="${h(o.c)}" placeholder="コード">
+      <input data-p="p.transport.${i}.n" value="${h(o.n)}">
+      <button class="btn danger" style="flex:0 0 44px;margin:0;padding:9px" data-act="delTransport" data-i="${i}">✕</button>
+    </div>`).join('')}
+    <button class="btn ghost" data-act="addTransport">＋ 交通機関を追加</button>
+    <p class="hint">伝票のプルダウンと同じ番号・名称にしておくと、転記で迷いません。</p>
+  </div>
+
+  <div class="card">
+    <h2>記憶した候補</h2>
+    <p class="hint">入力した会社・人名・地名は自動で貯まり、次回から候補に出ます。</p>
+    <div class="total"><span>会社</span><span>${S.master.companies.length}</span></div>
+    <div class="total"><span>人名</span><span>${S.master.people.length}</span></div>
+    <div class="total"><span>地名</span><span>${S.master.places.length}</span></div>
+    <button class="btn danger" data-act="clearMaster">候補をすべて消す</button>
+  </div>`;
+}
+
+/* =========================================================
+   入力の反映
+   ========================================================= */
+function setPath(path, value) {
+  const t = trip();
+  const seg = path.split('.');
+  if (seg[0] === 'p') {
+    if (seg[1] === 'transport') S.profile.transport[+seg[2]][seg[3]] = value;
+    else S.profile[seg[1]] = value;
+    return;
+  }
+  if (seg[0] === 't') { t[seg[1]] = value; return; }
+  const list = t[seg[0]];               // R / O / E
+  list[+seg[1]][seg[2]] = value;
+}
+
+document.addEventListener('input', e => {
+  const el = e.target;
+  const path = el.dataset.p;
+  if (!path || el.dataset.act) return;
+  let v = el.type === 'checkbox' ? el.checked : el.value;
+  if (el.type === 'number') v = num(v);
+  setPath(path, v);
+  save();
+  if (view.name === 'trip') refreshSummaries();
+});
+
+document.addEventListener('change', e => {
+  const el = e.target;
+  const path = el.dataset.p;
+  if (!path || el.dataset.act) return;
+  let v = el.type === 'checkbox' ? el.checked : el.value;
+  if (el.type === 'number') v = num(v);
+  setPath(path, v);
+  /* 会社・人名・地名は自動で記憶する */
+  if (/\.(a|b)$/.test(path)) learn('places', v);
+  if (/\.(v|co)$/.test(path)) learn('companies', v);
+  if (/\.p$/.test(path)) learn('people', v);
+  save();
+  if (el.dataset.re) render();
+});
+
+/* 金額を打った瞬間、合計と行の見出しだけ更新する（再描画しない） */
+function refreshSummaries() {
+  const t = trip();
+  if (!t) return;
+  document.querySelectorAll('.item').forEach(item => {
+    const k = item.querySelector('[data-act="toggle"]')?.dataset.k;
+    if (!k) return;
+    const [g, i] = k.split('.');
+    const r = t[g][+i];
+    const y = item.querySelector('.y');
+    if (!y) return;
+    const blank = r.y === null || r.y === undefined || r.y === '';
+    y.textContent = blank ? '金額未入力' : yen(r.y) + ' 円';
+    y.classList.toggle('no', blank);
+    item.classList.toggle('pending', blank);
+  });
+  const sum = a => a.reduce((x, r) => x + (Number(r.y) || 0), 0);
+  const t2 = [sum(t.R), sum(t.O), sum(t.E)];
+  const totals = document.querySelectorAll('.card .total');
+  if (totals.length) {
+    const grand = document.querySelector('.total.grand');
+    if (grand) grand.lastElementChild.textContent = yen(totalOf(t)) + ' 円';
+  }
+}
+
+/* =========================================================
+   操作
+   ========================================================= */
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  const act = el.dataset.act;
+  const t = trip();
+
+  if (act === 'newTrip') {
+    const nt = newTrip();
+    S.trips.push(nt); save();
+    view = { name: 'trip', tripId: nt.id, open: null };
+    return render();
+  }
+  if (act === 'openTrip') {
+    view = { name: 'trip', tripId: el.dataset.id, open: null };
+    return render();
+  }
+  if (act === 'toggle') {
+    view.open = view.open === el.dataset.k ? null : el.dataset.k;
+    return render();
+  }
+  if (act === 'add') {
+    const g = el.dataset.p;
+    const d = t.f || today();
+    if (g === 'R') t.R.push({ d, c: '', cn: S.profile.transport[0]?.n || '', a: '', b: '', r: false, y: null, v: '' });
+    if (g === 'O') t.O.push({ d, k: 'toll', y: null, m: '' });
+    if (g === 'E') t.E.push({ d, s: '', y: null, co: '', p: '', m: '' });
+    view.open = g + '.' + (t[g].length - 1);
+    save(); return render();
+  }
+  if (act === 'del') {
+    t[el.dataset.p].splice(+el.dataset.i, 1);
+    view.open = null; save(); return render();
+  }
+  if (act === 'delTrip') {
+    if (!confirm('この出張を削除します。よろしいですか？')) return;
+    S.trips = S.trips.filter(x => x.id !== t.id);
+    view = { name: 'list', tripId: null, open: null };
+    save(); return render();
+  }
+  if (act === 'chipDel') {
+    const seg = el.dataset.p.split('.');
+    t[seg[1]].splice(+el.dataset.i, 1);
+    save(); return render();
+  }
+  if (act === 'addTransport') { S.profile.transport.push({ c: '', n: '' }); save(); return render(); }
+  if (act === 'delTransport') { S.profile.transport.splice(+el.dataset.i, 1); save(); return render(); }
+  if (act === 'clearMaster') {
+    if (!confirm('記憶した会社・人名・地名をすべて消します。')) return;
+    S.master = { companies: [], people: [], places: [] };
+    save(); return render();
+  }
+  if (act === 'preview') { openPreview(); return; }
+  if (act === 'mailApply') { openApplyMail(); return; }
+});
+
+/* チップ追加（Enter または フォーカスを外したとき） */
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const el = e.target;
+  if (el.dataset?.act !== 'chipAdd') return;
+  e.preventDefault();
+  addChip(el);
+});
+document.addEventListener('focusout', e => {
+  const el = e.target;
+  if (el.dataset?.act === 'chipAdd' && el.value.trim()) addChip(el);
+});
+function addChip(el) {
+  const v = el.value.trim();
+  if (!v) return;
+  const t = trip();
+  const key = el.dataset.p.split('.')[1];   // co / at / mt
+  if (!t[key].includes(v)) t[key].push(v);
+  learn(key === 'co' ? 'companies' : 'people', v);
+  el.value = '';
+  save(); render();
+}
+
+/* ---------- 出力 ---------- */
+function buildPayload(t) {
+  const p = S.profile;
+  const days = dayCount(t.f, t.o);
+  return {
+    v: 1, t: t.t, f: t.f, o: t.o, dp: t.dp, pc: t.pc, pj: t.pj,
+    nm: p.name, dn: p.deptName, dc: p.deptCode, en: p.empNo, em: p.email,
+    lt: t.lt, ng: t.ng || Math.max(days - 1, 0), pd: t.pd, la: t.la || 0, ar: t.ar || '',
+    R: t.R.map(r => ({ d: r.d, c: codeOf(r.cn), cn: r.cn, a: r.a, b: r.b, r: r.r ? 1 : 0, y: r.y, v: r.v })),
+    O: t.O.map(o => ({ d: o.d, k: o.k, y: o.y, m: o.m })),
+    E: t.E.map(x => ({ d: x.d, s: x.s, y: x.y, co: x.co, p: x.p, m: x.m })),
+    at: t.at, mt: t.mt, rn: t.rn,
+    rt: { p: p.perDiem, A: p.lodgeA, B: p.lodgeB, C: p.lodgeC },
+  };
+}
+function codeOf(name) {
+  return (S.profile.transport.find(o => o.n === name) || {}).c || '';
+}
+function openPreview() {
+  const t = trip();
+  location.href = './report.html#t=' + encodePayload(buildPayload(t));
+}
+function openApplyMail() {
+  const t = trip();
+  const days = dayCount(t.f, t.o);
+  const nights = t.ng || Math.max(days - 1, 0);
+  const timeFrom = t.dp === 'e' ? '18:00' : '08:00';
+  const itinerary = t.R.length
+    ? t.R.slice().sort((a, b) => (a.d || '').localeCompare(b.d || ''))
+        .map(r => `　${mdOf(r.d)} ${r.cn} ${r.a}${r.r ? '⇔' : '→'}${r.b}${r.v ? '（' + r.v + '）' : ''}`).join('\n')
+    : '　（別紙 行程表のとおり）';
+  const body = [
+    `件名・実施事項：${t.t}`,
+    `日時：${t.f} ${timeFrom} 〜 ${t.o} 18:00（${nights}泊${days}日）`,
+    `場所：${t.co.join('、')}`,
+    `面談者：${t.mt.join('、')}`,
+    `同行者：${t.at.join('、')}`,
+    `受注金額／利益：${t.amt || '－'} ／ ${t.profit || '－'}`,
+    `納期：${t.due || '－'}`,
+    `旅程：`,
+    itinerary,
+    `その他・補足：${t.memo || '－'}`,
+    '',
+    `${S.profile.deptName} ${S.profile.name}`,
+  ].join('\n');
+  const subject = '【出張申請 下書き】' + (t.t || '') + `（${t.f}〜${t.o}）`;
+  /* 上司への申請は社内サーバのメールで行うため、ここは常に自分宛の下書き */
+  const to = S.profile.email || '';
+  const url = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+  /* mailto はメールアプリが登録されていない環境（プレビュー／PWA／PCブラウザ）だと
+     押しても何も起きない。必ずシートを出して、本文のコピーという逃げ道を残す。 */
+  document.getElementById('mailTo').textContent =
+    (to ? `宛先：${to}（自分）` : '宛先：未設定（⚙設定 → 自分のメール）') + `　件名：${subject}`;
+  document.getElementById('mailOpen').href = url;
+  document.getElementById('mailBody').value = `件名：${subject}\n\n${body}`;
+  document.getElementById('mailSheet').classList.remove('hide');
+}
+document.getElementById('mailClose').onclick = () =>
+  document.getElementById('mailSheet').classList.add('hide');
+document.getElementById('mailSheet').onclick = e => {
+  if (e.target.id === 'mailSheet') e.currentTarget.classList.add('hide');
+};
+document.getElementById('mailCopy').onclick = async e => {
+  const ta = document.getElementById('mailBody');
+  try {
+    await navigator.clipboard.writeText(ta.value);
+  } catch (_) {
+    ta.select(); document.execCommand('copy');   // 古い端末・非HTTPS用
+  }
+  e.target.textContent = '✅ コピーしました';
+  setTimeout(() => { e.target.textContent = '📋 本文をコピー'; }, 1600);
+};
+
+/* ---------- ナビゲーション ---------- */
+document.getElementById('back').onclick = () => {
+  view = { name: 'list', tripId: null, open: null };
+  render();
+};
+document.getElementById('gear').onclick = () => {
+  view = { name: view.name === 'settings' ? 'list' : 'settings', tripId: view.tripId, open: null };
+  render();
+};
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+
+render();
+</script>
+</body>
+</html>

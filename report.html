@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>出張旅費 精算プレビュー</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+    background: #f4f5f7; color: #1a1a1a;
+  }
+  .sheet {
+    max-width: 1000px; margin: 0 auto 14px; background: #fff;
+    padding: 20px; border-radius: 8px; box-shadow: 0 1px 6px rgba(0,0,0,.1);
+  }
+  h1 { font-size: 17px; margin: 0 0 4px; text-align: center; }
+  h2 {
+    font-size: 13px; margin: 18px 0 6px; padding-left: 7px;
+    border-left: 4px solid #2f6fdb;
+  }
+  .period { text-align: center; font-size: 12px; color: #666; margin-bottom: 14px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .meta div { flex: 1 1 150px; border: 1px solid #ccc; padding: 5px 8px; font-size: 12px; }
+  .meta span { color: #777; display: block; font-size: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  th, td { border: 1px solid #bbb; padding: 4px 5px; text-align: center; }
+  th { background: #eef1f5; font-weight: 600; font-size: 10px; }
+  td.l { text-align: left; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.total td { background: #eef1f5; font-weight: 700; }
+  .warn { color: #c62828; font-weight: 600; }
+  .brk { color: #777; font-size: 10px; }
+  .calc { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .calc td { border: 1px solid #bbb; padding: 5px 7px; text-align: left; }
+  .calc td.num { text-align: right; }
+  .calc td.lbl { background: #eef1f5; font-size: 11px; width: 42%; }
+  .grand {
+    margin-top: 14px; border: 2px solid #2f6fdb; padding: 10px 12px;
+    font-size: 16px; font-weight: 700; text-align: right;
+  }
+  .grand span { float: left; font-size: 12px; color: #2f6fdb; padding-top: 4px; }
+  .notes { margin-top: 12px; font-size: 11px; color: #c62828; }
+  .notes p { margin: 2px 0; }
+  .squeeze {
+    margin-top: 12px; background: #fff8e6; border: 1px solid #e6c34a;
+    padding: 10px 12px; font-size: 12px; border-radius: 6px;
+  }
+  .squeeze p { margin: 0 0 8px; }
+  .squeeze label { display: block; margin: 5px 0; cursor: pointer; }
+  .rep dt { font-size: 10px; color: #777; margin-top: 8px; }
+  .rep dd { margin: 2px 0 0; font-size: 13px; border: 1px solid #ccc; padding: 5px 8px; min-height: 27px; white-space: pre-wrap; }
+  .actions { max-width: 1000px; margin: 14px auto 0; display: flex; gap: 8px; flex-wrap: wrap; }
+  .actions button, .actions a {
+    flex: 1 1 140px; padding: 12px; border: none; border-radius: 8px;
+    background: #2f6fdb; color: #fff; font-size: 14px; font-weight: 600;
+    text-align: center; text-decoration: none; cursor: pointer;
+  }
+  .actions .sub { background: #5a6472; }
+  .err { max-width: 600px; margin: 40px auto; text-align: center; color: #666; }
+  @media print {
+    body { background: #fff; padding: 0; }
+    .sheet { box-shadow: none; max-width: none; padding: 0 0 14px; border-radius: 0; }
+    .actions, .squeeze { display: none; }
+    th, .calc td.lbl { background: #eee !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+const OTHER_LABEL = { toll: '高速', park: '駐車', fuel: '燃料' };
+const LODGE_LABEL = {
+  A: '甲地：車（船・空）内に宿泊した場合',
+  B: '乙地：寮・知人宅等　非営利目的の場所',
+  C: '丙地：旅館・ホテル等・　営利目的の場所',
+};
+const MAX_ROWS = 10;
+
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const yen = n => (n === null || n === undefined || n === '') ? '' : Number(n).toLocaleString('ja-JP');
+const md  = ds => { if (!ds) return ''; const [y,m,d] = ds.split('-').map(Number); return `${y}/${String(m).padStart(2,'0')}/${String(d).padStart(2,'0')}`; };
+
+function decodePayload(s) {
+  const b64 = s.replace(/-/g,'+').replace(/_/g,'/');
+  const pad = b64 + '==='.slice((b64.length + 3) % 4);
+  return JSON.parse(decodeURIComponent(escape(atob(pad))));
+}
+
+/* 暦日数（出発日〜帰着日を含む） */
+function dayCount(from, to) {
+  if (!from || !to) return 0;
+  const a = new Date(from + 'T00:00:00'), b = new Date(to + 'T00:00:00');
+  return Math.round((b - a) / 86400000) + 1;
+}
+
+/* ---------------------------------------------------------
+   高速・駐車・ガソリンを、各日のレンタカー行へ合算する
+   （毎回の決まったやり方。同日にレンタカー行が無ければ
+     それ以前の直近のレンタカー行、それも無ければ③その他へ）
+--------------------------------------------------------- */
+function mergeOthers(payload) {
+  const rows = (payload.R || []).map(r => ({
+    d: r.d, c: r.c || '', cn: r.cn || '', a: r.a || '', b: r.b || '',
+    rt: !!r.r, y: (r.y === '' || r.y === undefined) ? null : r.y,
+    v: r.v || '', brk: [], src: 1,
+  }));
+  rows.sort((x, y2) => (x.d || '').localeCompare(y2.d || ''));
+
+  const leftovers = [];
+  (payload.O || []).forEach(o => {
+    const amount = (o.y === '' || o.y === undefined) ? null : o.y;
+    const isCar = r => r.cn.indexOf('レンタカー') >= 0 || r.c === '62';
+    let target = rows.find(r => r.d === o.d && isCar(r));
+    if (!target) {
+      const before = rows.filter(r => isCar(r) && (r.d || '') <= (o.d || ''));
+      target = before[before.length - 1];
+    }
+    if (!target) { leftovers.push(o); return; }
+    if (amount !== null) target.y = (target.y || 0) + amount;
+    target.brk.push(`${OTHER_LABEL[o.k] || o.k}${amount === null ? '未入力' : ' ' + yen(amount)}`);
+  });
+  return { rows, leftovers };
+}
+
+/* ---------------------------------------------------------
+   10行に収まらないときの圧縮
+   ① タクシー統合 → ② 往復統合 の順
+--------------------------------------------------------- */
+function squeezeTaxi(rows) {
+  const idx = rows.map((r, i) => r.cn.indexOf('タクシー') >= 0 ? i : -1).filter(i => i >= 0);
+  if (idx.length < 2) return rows;
+  const targets = idx.map(i => rows[i]);
+  const merged = {
+    d: targets[0].d, c: targets[0].c, cn: targets[0].cn,
+    a: '各所', b: '各所', rt: false,
+    y: targets.reduce((s, r) => s + (r.y || 0), 0),
+    v: [...new Set(targets.map(r => r.v).filter(Boolean))].join('・'),
+    brk: targets.map(r => `${md(r.d).slice(5)} ${r.a}→${r.b} ${yen(r.y)}`),
+    src: targets.length,
+  };
+  const out = rows.filter((r, i) => !idx.includes(i));
+  out.splice(idx[0] - 0, 0, merged);
+  out.sort((x, y2) => (x.d || '').localeCompare(y2.d || ''));
+  return out;
+}
+
+function squeezeRoundTrip(rows) {
+  const out = rows.slice();
+  for (let i = 0; i < out.length; i++) {
+    if (out[i].rt) continue;
+    for (let j = i + 1; j < out.length; j++) {
+      if (out[j].rt) continue;
+      if (out[i].c !== out[j].c || !out[i].c) continue;
+      const back = out[i].a && out[i].b && out[i].a === out[j].b && out[i].b === out[j].a;
+      if (!back) continue;
+      out[i] = {
+        ...out[i], rt: true,
+        y: (out[i].y || 0) + (out[j].y || 0),
+        v: [...new Set([out[i].v, out[j].v].filter(Boolean))].join('・'),
+        brk: out[i].brk.concat([
+          `往 ${md(out[i].d).slice(5)} ${yen(out[i].y)}`,
+          `復 ${md(out[j].d).slice(5)} ${yen(out[j].y)}`,
+        ]),
+        src: out[i].src + out[j].src,
+      };
+      out.splice(j, 1);
+      j--;
+      if (out.length <= MAX_ROWS) return out;
+    }
+  }
+  return out;
+}
+
+function render(p) {
+  const state = { taxi: false, rt: false };
+
+  function build() {
+    const { rows: base, leftovers } = mergeOthers(p);
+    let rows = base;
+    if (state.taxi) rows = squeezeTaxi(rows);
+    if (state.rt)   rows = squeezeRoundTrip(rows);
+
+    /* ① 交通費 */
+    const sum1 = rows.reduce((s, r) => s + (r.y || 0), 0);
+
+    /* ② 日当・宿泊費 */
+    const rate  = p.rt || {};
+    const days  = dayCount(p.f, p.o);
+    const pct   = (p.pd === undefined || p.pd === null) ? 100 : p.pd;
+    const perDiemUnit = rate.p ?? 1900;
+    const perDiem = Math.floor(perDiemUnit * pct / 100) * days;
+    const nights  = p.ng ?? Math.max(days - 1, 0);
+    const lodgeUnit = rate[p.lt] ?? 0;
+    const lodgeFix  = lodgeUnit * nights;
+    const lodgeAct  = p.la || 0;
+    const sum2 = perDiem + lodgeFix + lodgeAct;
+
+    /* ③ その他諸費用（合算先が無かった実費） */
+    const others = leftovers.map(o => ({
+      label: `${OTHER_LABEL[o.k] || o.k}（${md(o.d).slice(5)}）${o.m ? ' ' + o.m : ''}`,
+      y: o.y || 0,
+    }));
+    const sum3 = others.reduce((s, o) => s + o.y, 0);
+
+    const grand = sum1 + sum2 + sum3;
+
+    /* 未入力の警告 */
+    const notes = [];
+    const blank = rows.filter(r => r.y === null).length;
+    if (blank) notes.push(`※ 金額が未入力の行が ${blank} 行あります。合計は実額と異なります`);
+    const blankO = (p.O || []).filter(o => o.y === '' || o.y === undefined || o.y === null).length;
+    if (blankO) notes.push(`※ 高速・駐車・燃料に金額未入力が ${blankO} 件あります（レンタカー行の合算額が不足します）`);
+
+    /* 行の描画 */
+    const trs = rows.map((r, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${md(r.d)}</td>
+        <td class="l">${esc(r.c)}${r.c ? ' ' : ''}${esc(r.cn)}</td>
+        <td class="l">${esc(r.a)} ${r.rt ? '⇔' : '→'} ${esc(r.b)}</td>
+        <td>${r.rt ? '☑' : '☐'}</td>
+        <td class="num">${r.y === null ? '<span class="warn">⚠未入力</span>' : yen(r.y)}
+          ${r.brk.length ? `<div class="brk">${r.brk.map(esc).join('<br>')}</div>` : ''}</td>
+        <td class="l">${esc(r.v)}</td>
+      </tr>`).join('');
+
+    const emptyRows = Array.from({ length: Math.max(MAX_ROWS - rows.length, 0) }, (_, i) => `
+      <tr><td>${rows.length + i + 1}</td><td colspan="6"></td></tr>`).join('');
+
+    /* 10行超過時の圧縮提案 */
+    let squeeze = '';
+    if (base.length > MAX_ROWS) {
+      const over = rows.length - MAX_ROWS;
+      squeeze = `
+      <div class="squeeze">
+        <p><strong>交通費明細が ${base.length} 行あり、伝票の10行に収まりません。</strong>
+        ${over > 0 ? `あと <strong>${over} 行</strong> 減らす必要があります。` : '下の統合で10行に収まりました。'}</p>
+        <label><input type="checkbox" id="sqTaxi" ${state.taxi ? 'checked' : ''}>
+          ① タクシーを1行にまとめる</label>
+        <label><input type="checkbox" id="sqRt" ${state.rt ? 'checked' : ''}>
+          ② 同じ区間の往復を1行にまとめる（往復別にチェック）</label>
+      </div>`;
+    }
+
+    const timeFrom = p.dp === 'e' ? '18' : '08';
+    const timeTo = '18';
+
+    document.getElementById('root').innerHTML = `
+    <div class="sheet">
+      <h1>国内旅費・交通費伝票（転記用プレビュー）</h1>
+      <div class="period">${md(p.f)} 〜 ${md(p.o)}　${nights}泊 ${days}日</div>
+
+      <div class="meta">
+        <div><span>費目</span>00002 国内旅費（出張）</div>
+        <div><span>精算者</span>${esc(p.en)} ${esc(p.nm)}</div>
+        <div><span>計上部課</span>${esc(p.dc)} ${esc(p.dn)}</div>
+        <div><span>目的別</span>${esc(p.pc)}</div>
+        <div><span>プロジェクトコード</span>${esc(p.pj)}</div>
+      </div>
+      <div class="meta">
+        <div><span>出張期間（旅費）</span>${md(p.f)} ${timeFrom}時 から ${md(p.o)} ${timeTo}時　${nights}泊 ${days}日</div>
+        <div><span>用件</span>${esc(p.t)}</div>
+      </div>
+
+      <h2>交通費明細情報</h2>
+      <table>
+        <thead><tr>
+          <th style="width:24px"></th><th style="width:80px">日付</th><th>交通機関</th>
+          <th>乗車区間</th><th style="width:36px">往復別</th><th style="width:96px">金額</th><th>訪問先（行先等）</th>
+        </tr></thead>
+        <tbody>
+          ${trs}${emptyRows}
+          <tr class="total"><td colspan="5">①交通費合計</td><td class="num">${yen(sum1)}</td><td></td></tr>
+        </tbody>
+      </table>
+      ${squeeze}
+
+      <h2>旅費入力項目</h2>
+      <table class="calc">
+        <tr>
+          <td class="lbl">日当計算（教育受講、宿泊費実費は1/2）</td>
+          <td class="num">${yen(perDiemUnit)}</td><td style="width:44px">× ${pct}%</td>
+          <td style="width:60px">× ${days} 日</td><td class="num">${yen(perDiem)}</td>
+        </tr>
+        ${['A','B','C'].map(t => `
+        <tr>
+          <td class="lbl">宿泊費（${LODGE_LABEL[t]}）</td>
+          <td class="num">${yen(rate[t] ?? 0)}</td><td></td>
+          <td>× ${p.lt === t ? nights : 0} 日</td>
+          <td class="num">${p.lt === t ? yen(lodgeFix) : '0'}</td>
+        </tr>`).join('')}
+        <tr>
+          <td class="lbl">宿泊費（実費合計）</td>
+          <td class="num">${lodgeAct ? yen(lodgeAct) : '0'}</td><td></td><td></td>
+          <td class="num">${lodgeAct ? yen(lodgeAct) : '0'}</td>
+        </tr>
+        <tr class="total"><td colspan="4">②日当宿泊費合計</td><td class="num">${yen(sum2)}</td></tr>
+      </table>
+      ${p.ar ? `<table class="calc" style="margin-top:6px"><tr><td class="lbl">実費精算理由</td><td>${esc(p.ar)}</td></tr></table>` : ''}
+
+      ${others.length ? `
+      <h2>その他諸費用明細</h2>
+      <table class="calc">
+        ${others.map(o => `<tr><td class="lbl">${esc(o.label)}</td><td class="num">${yen(o.y)}</td></tr>`).join('')}
+        <tr class="total"><td>③その他諸費用合計</td><td class="num">${yen(sum3)}</td></tr>
+      </table>` : ''}
+
+      <div class="grand"><span>①＋②＋③合計</span>${yen(grand)} 円</div>
+      <div class="notes">${notes.map(n => `<p>${esc(n)}</p>`).join('')}</div>
+    </div>
+
+    <div class="sheet rep">
+      <h1>報告要旨（F8）転記用</h1>
+      <dl>
+        <dt>件名</dt><dd>${esc(p.t)}</dd>
+        <dt>同行者</dt><dd>${esc((p.at || []).join('、'))}</dd>
+        <dt>面談者</dt><dd>${esc((p.mt || []).join('、'))}</dd>
+        <dt>内容</dt><dd>${esc(p.rn)}</dd>
+      </dl>
+    </div>
+
+    ${(p.E || []).length ? `
+    <div class="sheet">
+      <h1>交際費・協議費他（第2弾で伝票化）</h1>
+      <table>
+        <thead><tr><th style="width:80px">日付</th><th>店・品目</th><th>相手先</th><th>参加者・メモ</th><th style="width:96px">金額</th></tr></thead>
+        <tbody>
+          ${(p.E || []).map(e => `<tr>
+            <td>${md(e.d)}</td><td class="l">${esc(e.s)}</td><td class="l">${esc(e.co)}</td>
+            <td class="l">${esc([e.p, e.m].filter(Boolean).join(' / '))}</td>
+            <td class="num">${e.y === null || e.y === '' ? '<span class="warn">⚠未入力</span>' : yen(e.y)}</td>
+          </tr>`).join('')}
+          <tr class="total"><td colspan="4">合計</td>
+            <td class="num">${yen((p.E || []).reduce((s, e) => s + (Number(e.y) || 0), 0))}</td></tr>
+        </tbody>
+      </table>
+    </div>` : ''}
+
+    <div class="actions">
+      <button id="btnPrint">🖨 印刷 / PDF保存</button>
+      <a class="sub" id="mailLink" href="#">✉️ このプレビューをメールで送る</a>
+      <a class="sub" href="./index.html">← アプリに戻る</a>
+    </div>`;
+
+    document.getElementById('btnPrint').onclick = () => window.print();
+    const t = document.getElementById('sqTaxi'), r = document.getElementById('sqRt');
+    if (t) t.onchange = e => { state.taxi = e.target.checked; build(); };
+    if (r) r.onchange = e => { state.rt   = e.target.checked; build(); };
+
+    const subject = `出張旅費精算 ${md(p.f)}〜${md(p.o)} ${p.t || ''}`;
+    const body = [
+      `${p.dn || ''} ${p.nm || ''}`,
+      `出張期間：${md(p.f)} 〜 ${md(p.o)}（${nights}泊${days}日）`,
+      `用件：${p.t || ''}`,
+      '',
+      `①交通費合計：${yen(sum1)} 円`,
+      `②日当宿泊費合計：${yen(sum2)} 円`,
+      `③その他諸費用合計：${yen(sum3)} 円`,
+      `①+②+③合計：${yen(grand)} 円`,
+      '',
+      '▼ 伝票の形で開く（会社PCのブラウザで開いてください）',
+      location.href,
+    ].join('\n');
+    document.getElementById('mailLink').href =
+      `mailto:${p.em || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  }
+
+  build();
+}
+
+try {
+  const m = location.hash.match(/[#&]t=([^&]+)/);
+  if (!m) throw new Error('no payload');
+  render(decodePayload(m[1]));
+} catch (err) {
+  document.getElementById('root').innerHTML =
+    `<div class="err"><p>精算データが読み取れませんでした。</p>
+     <p><a href="./index.html">アプリに戻る</a></p></div>`;
+}
+</script>
+</body>
+</html>
