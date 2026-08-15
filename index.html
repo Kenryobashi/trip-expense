@@ -152,7 +152,7 @@ const LODGE = [
 
 const DEFAULT_STATE = {
   profile: {
-    name: '', empNo: '', deptCode: '', deptName: '',
+    name: '', deptName: '',
     /* 下書きの宛先は常に自分。公開リポジトリにメールアドレスを置かないため、
        初回だけ ⚙設定 で入力する（端末の localStorage に残る） */
     email: '',
@@ -212,7 +212,6 @@ function newTrip() {
   const d = today();
   return {
     id: uid(), t: '', f: d, o: d, dp: 'm',
-    pc: '1101', pj: '',
     lt: 'C', ng: 0, pd: 100, la: null, ar: '',
     co: [], at: [], mt: [],
     amt: '', profit: '', due: '', memo: '',
@@ -308,10 +307,6 @@ function viewTrip() {
       <select data-p="t.lt" data-re="1">${opt(LODGE, t.lt, 't', 'n')}</select></label>
     <label class="f"><span>訪問先（会社）</span></label>
     ${chips('t.co', t.co, 'dlCompany', '会社名を入力して Enter')}
-    <div class="row2" style="margin-top:9px">
-      <label class="f"><span>目的別コード</span><input data-p="t.pc" value="${h(t.pc)}"></label>
-      <label class="f"><span>プロジェクトコード</span><input data-p="t.pj" value="${h(t.pj)}"></label>
-    </div>
   </div>`;
 
   /* --- 交通費の行 --- */
@@ -463,12 +458,10 @@ function viewSettings() {
   const p = S.profile;
   return `<div class="card">
     <h2>基本情報（一度だけ）</h2>
+    <!-- 社員番号・部課コードは会社PC側で自動反映されるため持たない。
+         氏名・部課名は申請メールの署名にだけ使う -->
     <div class="row2">
       <label class="f"><span>氏名</span><input data-p="p.name" value="${h(p.name)}"></label>
-      <label class="f"><span>社員番号</span><input data-p="p.empNo" value="${h(p.empNo)}"></label>
-    </div>
-    <div class="row2">
-      <label class="f"><span>部課コード</span><input data-p="p.deptCode" value="${h(p.deptCode)}"></label>
       <label class="f"><span>部課名</span><input data-p="p.deptName" value="${h(p.deptName)}"></label>
     </div>
     <label class="f"><span>自分のメール（下書き・プレビューの送り先）</span>
@@ -658,8 +651,8 @@ function buildPayload(t) {
   const p = S.profile;
   const days = dayCount(t.f, t.o);
   return {
-    v: 1, t: t.t, f: t.f, o: t.o, dp: t.dp, pc: t.pc, pj: t.pj,
-    nm: p.name, dn: p.deptName, dc: p.deptCode, en: p.empNo, em: p.email,
+    v: 1, t: t.t, f: t.f, o: t.o, dp: t.dp,
+    nm: p.name, dn: p.deptName, em: p.email,
     lt: t.lt, ng: t.ng || Math.max(days - 1, 0), pd: t.pd, la: t.la || 0, ar: t.ar || '',
     R: t.R.map(r => ({ d: r.d, c: codeOf(r.cn), cn: r.cn, a: r.a, b: r.b, r: r.r ? 1 : 0, y: r.y, v: r.v })),
     O: t.O.map(o => ({ d: o.d, k: o.k, y: o.y, m: o.m })),

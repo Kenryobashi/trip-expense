@@ -253,13 +253,7 @@ function render(p) {
       <h1>国内旅費・交通費伝票（転記用プレビュー）</h1>
       <div class="period">${md(p.f)} 〜 ${md(p.o)}　${nights}泊 ${days}日</div>
 
-      <div class="meta">
-        <div><span>費目</span>00002 国内旅費（出張）</div>
-        <div><span>精算者</span>${esc(p.en)} ${esc(p.nm)}</div>
-        <div><span>計上部課</span>${esc(p.dc)} ${esc(p.dn)}</div>
-        <div><span>目的別</span>${esc(p.pc)}</div>
-        <div><span>プロジェクトコード</span>${esc(p.pj)}</div>
-      </div>
+      <!-- 費目・精算者・計上部課・目的別・プロジェクトは会社PC側で自動反映されるため持たない -->
       <div class="meta">
         <div><span>出張期間（旅費）</span>${md(p.f)} ${timeFrom}時 から ${md(p.o)} ${timeTo}時　${nights}泊 ${days}日</div>
         <div><span>用件</span>${esc(p.t)}</div>
