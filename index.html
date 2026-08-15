@@ -730,6 +730,30 @@ document.getElementById('gear').onclick = () => {
   render();
 };
 
+/* ---------- URL から出張を取り込む ----------
+   index.html#imp=<base64url の出張データ> で開くと、その出張が端末に追加される。
+   機種変更・別端末での参照・見本データの配布に使う。 */
+function importFromHash() {
+  const m = location.hash.match(/[#&]imp=([^&]+)/);
+  if (!m) return false;
+  try {
+    const b = m[1].replace(/-/g, '+').replace(/_/g, '/');
+    const t = JSON.parse(decodeURIComponent(escape(atob(b))));
+    history.replaceState(null, '', location.pathname);   // ハッシュを消して再取り込みを防ぐ
+    if (S.trips.some(x => x.id === t.id)) {              // 同じものが既にあれば開くだけ
+      view = { name: 'trip', tripId: t.id, open: null };
+      return true;
+    }
+    S.trips.push(t);
+    (t.co || []).forEach(v => learn('companies', v));
+    [...(t.at || []), ...(t.mt || [])].forEach(v => learn('people', v));
+    save();
+    view = { name: 'trip', tripId: t.id, open: null };
+    return true;
+  } catch { return false; }
+}
+importFromHash();
+
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
