@@ -39,6 +39,8 @@
     font-size: 15px; font-family: inherit; background: #fff;
   }
   input[type=number] { text-align: right; font-variant-numeric: tabular-nums; }
+  /* 自動で決まる欄。入力しなくてよいと一目で分かるようにする */
+  input.auto { background: #eef1f5; color: #555; border-style: dashed; }
   textarea { min-height: 76px; resize: vertical; }
   .row2 { display: flex; gap: 8px; }
   .row2 > * { flex: 1; min-width: 0; }
@@ -150,6 +152,12 @@ const LODGE = [
   { t: 'A', n: '甲地：車（船・空）内' },
 ];
 
+/* 社名はアルファベット表記。記憶ゼロの状態でも候補に出す */
+const FREQ_COMPANIES = ['N社', 'K社', 'M社', 'F社'];
+
+/* 報告要旨の下書きの型。新しい出張を作った時点で入っている */
+const RN_TEMPLATE = '件名：\n実施事項：\n結果：\n';
+
 const DEFAULT_STATE = {
   profile: {
     name: '', deptName: '',
@@ -237,6 +245,21 @@ function dayCount(f, t) {
 }
 function trip() { return S.trips.find(t => t.id === view.tripId); }
 
+/* 出発日を入れたら帰着日を追従させ、泊数は常に日付から決める（出発パターンに依らない） */
+function syncDates(t) {
+  if (!t) return;
+  if (t.f && (!t.o || t.o < t.f)) t.o = t.f;
+  t.ng = Math.max(dayCount(t.f, t.o) - 1, 0);
+}
+
+/* 明細を日付順に並べ直す。開いている行は追従させる */
+function sortByDate(t, g) {
+  const seg = String(view.open || '').split('.');
+  const open = seg[0] === g ? t[g][+seg[1]] : null;
+  t[g].sort((a, b) => (a.d || '').localeCompare(b.d || ''));
+  if (open) view.open = g + '.' + t[g].indexOf(open);
+}
+
 /* マスタへ自動記憶 */
 function learn(key, v) {
   v = (v || '').trim();
@@ -258,7 +281,7 @@ function newTrip() {
     lt: 'C', ng: 0, pd: 100, la: null, ar: '',
     co: [], at: [], mt: [],
     amt: '', profit: '', due: '', memo: '',
-    R: [], O: [], E: [], rn: '',
+    R: [], O: [], E: [], rn: RN_TEMPLATE,
     createdAt: Date.now(),
   };
 }
@@ -271,7 +294,8 @@ function render() {
   const back = document.getElementById('back');
   const title = document.getElementById('title');
 
-  document.getElementById('dlCompany').innerHTML = S.master.companies.map(c => `<option value="${h(c)}">`).join('');
+  const companies = FREQ_COMPANIES.concat(S.master.companies.filter(c => !FREQ_COMPANIES.includes(c)));
+  document.getElementById('dlCompany').innerHTML = companies.map(c => `<option value="${h(c)}">`).join('');
   document.getElementById('dlPerson').innerHTML  = S.master.people.map(c => `<option value="${h(c)}">`).join('');
   document.getElementById('dlPlace').innerHTML   = S.master.places.map(c => `<option value="${h(c)}">`).join('');
 
@@ -322,7 +346,7 @@ function viewTrip() {
   if (!t) { view.name = 'list'; return viewList(); }
 
   const days = dayCount(t.f, t.o);
-  const nights = t.ng || Math.max(days - 1, 0);
+  const nights = Math.max(days - 1, 0);
   const timeFrom = t.dp === 'e' ? '18:00' : '08:00';
 
   const opt = (arr, v, val, lab) => arr.map(o =>
@@ -334,8 +358,10 @@ function viewTrip() {
     <label class="f"><span>件名・実施事項</span>
       <input data-p="t.t" value="${h(t.t)}" placeholder="×××社／○○○向け 空気圧縮機 立会検査（メーカー名）"></label>
     <div class="row2">
-      <label class="f"><span>出発日</span><input type="date" data-p="t.f" value="${h(t.f)}"></label>
-      <label class="f"><span>帰着日</span><input type="date" data-p="t.o" value="${h(t.o)}"></label>
+      <label class="f"><span>出発日</span>
+        <input type="date" data-p="t.f" data-re="1" value="${h(t.f)}"></label>
+      <label class="f"><span>帰着日</span>
+        <input type="date" data-p="t.o" data-re="1" min="${h(t.f)}" value="${h(t.o)}"></label>
     </div>
     <div class="row2">
       <label class="f"><span>出発パターン</span>
@@ -343,8 +369,8 @@ function viewTrip() {
           <option value="m" ${t.dp === 'm' ? 'selected' : ''}>朝出発（08:00〜18:00）</option>
           <option value="e" ${t.dp === 'e' ? 'selected' : ''}>前日夜移動（18:00〜18:00）</option>
         </select></label>
-      <label class="f"><span>泊数</span>
-        <input type="number" data-p="t.ng" data-re="1" value="${nights}"></label>
+      <label class="f"><span>泊数（日付から自動）</span>
+        <input type="text" value="${nights}泊" readonly class="auto"></label>
     </div>
     <p class="hint">出張期間：${h(t.f)} ${timeFrom} 〜 ${h(t.o)} 18:00　${nights}泊${days}日（日当 ${days}日分）</p>
     <label class="f"><span>宿泊費の区分</span>
@@ -473,14 +499,16 @@ function viewTrip() {
     <label class="f" style="margin-top:9px"><span>面談者</span></label>
     ${chips('t.mt', t.mt, 'dlPerson', '例）○○社 ○○SM → Enter')}
     <div class="row2" style="margin-top:9px">
-      <label class="f"><span>受注金額</span><input data-p="t.amt" value="${h(t.amt)}"></label>
-      <label class="f"><span>利益</span><input data-p="t.profit" value="${h(t.profit)}"></label>
+      <label class="f"><span>受注金額（千円）</span>
+        <input type="number" inputmode="numeric" data-p="t.amt" value="${h(t.amt)}"></label>
+      <label class="f"><span>利益（千円）</span>
+        <input type="number" inputmode="numeric" data-p="t.profit" value="${h(t.profit)}"></label>
     </div>
     <label class="f"><span>納期</span><input data-p="t.due" value="${h(t.due)}"></label>
     <label class="f"><span>その他・補足（会食の有無など）</span>
       <input data-p="t.memo" value="${h(t.memo)}"></label>
     <label class="f"><span>内容（報告要旨に入ります）</span>
-      <textarea data-p="t.rn">${h(t.rn)}</textarea></label>
+      <textarea data-p="t.rn" style="min-height:120px">${h(t.rn)}</textarea></label>
   </div>
 
   <div class="card">
@@ -587,6 +615,13 @@ document.addEventListener('change', e => {
   if (/\.(a|b)$/.test(path)) learn('places', v);
   if (/\.(v|co)$/.test(path)) learn('companies', v);
   if (/\.p$/.test(path)) learn('people', v);
+
+  if (path === 't.f' || path === 't.o') syncDates(trip());
+
+  /* 明細の日付を直したら、その場で日付順に並べ直す */
+  const g = path.match(/^([ROE])\.\d+\.d$/);
+  if (g) { sortByDate(trip(), g[1]); save(); return render(); }
+
   save();
   if (el.dataset.re) render();
 });
@@ -705,7 +740,7 @@ function buildPayload(t) {
   return {
     v: 1, t: t.t, f: t.f, o: t.o, dp: t.dp,
     nm: p.name, dn: p.deptName, em: p.email,
-    lt: t.lt, ng: t.ng || Math.max(days - 1, 0), pd: t.pd, la: t.la || 0, ar: t.ar || '',
+    lt: t.lt, ng: Math.max(days - 1, 0), pd: t.pd, la: t.la || 0, ar: t.ar || '',
     R: t.R.map(r => ({ d: r.d, c: codeOf(r.cn), cn: r.cn, a: r.a, b: r.b, r: r.r ? 1 : 0, y: r.y, v: r.v })),
     O: t.O.map(o => ({ d: o.d, k: o.k, y: o.y, m: o.m })),
     E: t.E.map(x => ({ d: x.d, s: x.s, y: x.y, co: x.co, p: x.p, m: x.m })),
@@ -723,7 +758,7 @@ function openPreview() {
 function openApplyMail() {
   const t = trip();
   const days = dayCount(t.f, t.o);
-  const nights = t.ng || Math.max(days - 1, 0);
+  const nights = Math.max(days - 1, 0);
   const timeFrom = t.dp === 'e' ? '18:00' : '08:00';
   const itinerary = t.R.length
     ? t.R.slice().sort((a, b) => (a.d || '').localeCompare(b.d || ''))
@@ -735,7 +770,7 @@ function openApplyMail() {
     `場所：${t.co.join('、')}`,
     `面談者：${t.mt.join('、')}`,
     `同行者：${t.at.join('、')}`,
-    `受注金額／利益：${t.amt || '－'} ／ ${t.profit || '－'}`,
+    `受注金額／利益：${t.amt ? yen(t.amt) + '千円' : '－'} ／ ${t.profit ? yen(t.profit) + '千円' : '－'}`,
     `納期：${t.due || '－'}`,
     `旅程：`,
     itinerary,
