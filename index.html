@@ -156,7 +156,7 @@ const LODGE = [
 const FREQ_COMPANIES = ['N社', 'K社', 'M社', 'F社'];
 
 /* 報告要旨の下書きの型。新しい出張を作った時点で入っている */
-const RN_TEMPLATE = '件名：\n実施事項：\n結果：\n';
+const RN_TEMPLATE = '結果：\n';
 
 const DEFAULT_STATE = {
   profile: {
@@ -177,6 +177,7 @@ const DEFAULT_STATE = {
    このファイルは公開リポジトリに置くため、社名・人名はすべて伏せてある。 */
 const SAMPLE = {
   id: 'sample', t: '○○発電所 定修工事立会他',
+  ji: '○○発電所／定修工事\n①タービン油冷却ユニット用3方弁 補修\n②空気圧縮機（5台）、エアドライヤー（2台）年次点検整備',
   f: '2026-07-22', o: '2026-07-24', dp: 'e',
   lt: 'C', ng: 2, pd: 100, la: null, ar: '',
   co: ['○○発電所', '自社 大阪支店'],
@@ -198,8 +199,7 @@ const SAMPLE = {
     { d: '2026-07-23', s: '会食', y: 9980, co: '○○商事', p: '先方4名＋自社2名（計6名）', m: '' },
     { d: '2026-07-23', s: 'おみやげ', y: 1650, co: '協力会社', p: '', m: '' },
   ],
-  rn: '○○発電所／定修工事①タービン油冷却ユニット用3方弁補修②空気圧縮機（5台）、'
-    + 'エアドライヤー（2台）年次点検整備。詳細は別紙報告書をご参照。',
+  rn: '結果：立会検査を完了。是正事項なし。詳細は別紙報告書をご参照。',
   createdAt: 0,
 };
 function hasSample() { return S.trips.some(t => t.id === 'sample'); }
@@ -277,7 +277,7 @@ function encodePayload(o) {
 function newTrip() {
   const d = today();
   return {
-    id: uid(), t: '', f: d, o: d, dp: 'm',
+    id: uid(), t: '', ji: '', f: d, o: d, dp: 'm',
     lt: 'C', ng: 0, pd: 100, la: null, ar: '',
     co: [], at: [], mt: [],
     amt: '', profit: '', due: '', memo: '',
@@ -355,8 +355,11 @@ function viewTrip() {
   /* --- 基本情報 --- */
   const basic = `<div class="card">
     <h2>基本情報</h2>
-    <label class="f"><span>件名・実施事項</span>
+    <label class="f"><span>件名</span>
       <input data-p="t.t" value="${h(t.t)}" placeholder="×××社／○○○向け 空気圧縮機 立会検査（メーカー名）"></label>
+    <label class="f"><span>実施事項（申請メールと報告要旨の両方に入ります）</span>
+      <textarea data-p="t.ji" style="min-height:84px"
+        placeholder="現地で何をするか。出張前に書いておくと、そのまま報告要旨に載ります">${h(t.ji)}</textarea></label>
     <div class="row2">
       <label class="f"><span>出発日</span>
         <input type="date" data-p="t.f" data-re="1" value="${h(t.f)}"></label>
@@ -507,8 +510,8 @@ function viewTrip() {
     <label class="f"><span>納期</span><input data-p="t.due" value="${h(t.due)}"></label>
     <label class="f"><span>その他・補足（会食の有無など）</span>
       <input data-p="t.memo" value="${h(t.memo)}"></label>
-    <label class="f"><span>内容（報告要旨に入ります）</span>
-      <textarea data-p="t.rn" style="min-height:120px">${h(t.rn)}</textarea></label>
+    <label class="f"><span>結果・所感（報告要旨の「内容」に入ります）</span>
+      <textarea data-p="t.rn" style="min-height:96px">${h(t.rn)}</textarea></label>
   </div>
 
   <div class="card">
@@ -738,7 +741,7 @@ function buildPayload(t) {
   const p = S.profile;
   const days = dayCount(t.f, t.o);
   return {
-    v: 1, t: t.t, f: t.f, o: t.o, dp: t.dp,
+    v: 1, t: t.t, ji: t.ji || '', f: t.f, o: t.o, dp: t.dp,
     nm: p.name, dn: p.deptName, em: p.email,
     lt: t.lt, ng: Math.max(days - 1, 0), pd: t.pd, la: t.la || 0, ar: t.ar || '',
     R: t.R.map(r => ({ d: r.d, c: codeOf(r.cn), cn: r.cn, a: r.a, b: r.b, r: r.r ? 1 : 0, y: r.y, v: r.v })),
@@ -765,7 +768,8 @@ function openApplyMail() {
         .map(r => `　${mdOf(r.d)} ${r.cn} ${r.a}${r.r ? '⇔' : '→'}${r.b}${r.v ? '（' + r.v + '）' : ''}`).join('\n')
     : '　（別紙 行程表のとおり）';
   const body = [
-    `件名・実施事項：${t.t}`,
+    `件名：${t.t}`,
+    `実施事項：\n${(t.ji || '－').replace(/^/gm, '　')}`,
     `日時：${t.f} ${timeFrom} 〜 ${t.o} 18:00（${nights}泊${days}日）`,
     `場所：${t.co.join('、')}`,
     `面談者：${t.mt.join('、')}`,

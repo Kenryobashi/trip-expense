@@ -1,6 +1,6 @@
 /* 出張旅費 — オフラインでも開けるようにするだけの最小 Service Worker
    ファイルを直したら CACHE_NAME の番号を必ず上げること */
-const CACHE_NAME = 'trip-expense-v9';
+const CACHE_NAME = 'trip-expense-v10';
 const ASSETS = [
   './',
   './index.html',

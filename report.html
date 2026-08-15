@@ -310,6 +310,7 @@ function render(p) {
       <h1>報告要旨（F8）転記用</h1>
       <dl>
         <dt>件名</dt><dd>${esc(p.t)}</dd>
+        <dt>実施事項</dt><dd>${esc(p.ji || '')}</dd>
         <dt>同行者</dt><dd>${esc((p.at || []).join('、'))}</dd>
         <dt>面談者</dt><dd>${esc((p.mt || []).join('、'))}</dd>
         <dt>内容</dt><dd>${esc(p.rn)}</dd>
